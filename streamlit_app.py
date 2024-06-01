@@ -54,7 +54,10 @@ def train_model(progress_bar, status_text):
 # Load the model if it exists
 def load_model():
     if os.path.exists(MODEL_PATH):
-        return tf.keras.models.load_model(MODEL_PATH)
+        try:
+            return tf.keras.models.load_model(MODEL_PATH)
+        except Exception as e:
+            st.error(f"Error loading model: {e}")
     return None
 
 # Initialize the model
