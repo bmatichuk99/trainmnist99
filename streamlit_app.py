@@ -16,8 +16,8 @@ def preprocess_image(image):
     # Invert the colors (MNIST images are white on black)
     # image = 255 - image
     # Normalize the image
-    image = image + 255
-    image = 255 - image
+    # image = image + 255
+    # image = 255 - image
     # Reshape the image to fit the model input
     image = image.reshape(1, 28, 28, 1)
     return image
