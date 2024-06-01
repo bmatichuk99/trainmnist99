@@ -14,9 +14,9 @@ def preprocess_image(image):
     # Convert the image to a numpy array
     image = np.array(image)
     # Invert the colors (MNIST images are white on black)
-    image = 255 - image
+    # image = 255 - image
     # Normalize the image
-    image = image / 255.0
+    # image = image / 255.0
     # Reshape the image to fit the model input
     image = image.reshape(1, 28, 28, 1)
     return image
