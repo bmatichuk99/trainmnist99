@@ -1,70 +1,108 @@
 import streamlit as st
 import tensorflow as tf
-from tensorflow.keras.datasets import mnist
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Flatten
-from tensorflow.keras.utils import to_categorical
 import numpy as np
+import cv2
+from PIL import Image, ImageOps
+from streamlit_drawable_canvas import st_canvas
 
-# Function to load and preprocess the MNIST dataset
-@st.cache(allow_output_mutation=True)
-def load_data():
-    (x_train, y_train), (x_test, y_test) = mnist.load_data()
-    x_train = x_train.astype('float32') / 255
-    x_test = x_test.astype('float32') / 255
-    y_train = to_categorical(y_train, 10)
-    y_test = to_categorical(y_test, 10)
-    return (x_train, y_train), (x_test, y_test)
+# Function to preprocess the image
+def preprocess_image(image):
+    # Convert the image to grayscale
+    image = ImageOps.grayscale(image)
+    # Resize the image to 28x28 pixels
+    image = image.resize((28, 28))
+    # Convert the image to a numpy array
+    image = np.array(image)
+    # Invert the colors (MNIST images are white on black)
+    image = cv2.bitwise_not(image)
+    # Normalize the image
+    image = image / 255.0
+    # Reshape the image to fit the model input
+    image = image.reshape(1, 28, 28, 1)
+    return image
 
-# Function to create the model
-def create_model():
-    model = Sequential([
-        Flatten(input_shape=(28, 28)),
-        Dense(512, activation='relu'),
-        Dense(10, activation='softmax')
+# Function to build and train the model
+def train_model(progress_bar, status_text):
+    # Load and preprocess the MNIST dataset
+    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
+    x_train = x_train.reshape(-1, 28, 28, 1).astype('float32') / 255
+    x_test = x_test.reshape(-1, 28, 28, 1).astype('float32') / 255
+
+    # Build the model
+    model = tf.keras.Sequential([
+        tf.keras.layers.Conv2D(32, kernel_size=(3, 3), activation='relu', input_shape=(28, 28, 1)),
+        tf.keras.layers.MaxPooling2D(pool_size=(2, 2)),
+        tf.keras.layers.Flatten(),
+        tf.keras.layers.Dense(128, activation='relu'),
+        tf.keras.layers.Dense(10, activation='softmax')
     ])
-    model.compile(optimizer='adam',
-                  loss='categorical_crossentropy',
-                  metrics=['accuracy'])
-    return model
 
-# Streamlit app
-st.title("MNIST Training App")
+    # Compile the model
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
-st.write("This app trains a simple neural network on the MNIST dataset.")
+    # Custom callback to update progress bar and status text
+    class StreamlitCallback(tf.keras.callbacks.Callback):
+        def on_epoch_end(self, epoch, logs=None):
+            progress = (epoch + 1) / self.params['epochs']
+            progress_bar.progress(progress)
+            status_text.text(f"Epoch {epoch + 1}/{self.params['epochs']}, Loss: {logs['loss']:.4f}, Accuracy: {logs['accuracy']:.4f}")
 
-# Load data
-(x_train, y_train), (x_test, y_test) = load_data()
-
-# Display data shape
-st.write("Training data shape: ", x_train.shape)
-st.write("Test data shape: ", x_test.shape)
-
-# Train model button
-if st.button("Train Model"):
-    model = create_model()
-    with st.spinner('Training the model...'):
-        history = model.fit(x_train, y_train, epochs=5, batch_size=32, validation_data=(x_test, y_test))
-    st.success('Model training completed!')
-
-    # Display training history
-    st.write("Training accuracy:", history.history['accuracy'][-1])
-    st.write("Validation accuracy:", history.history['val_accuracy'][-1])
-
-    # Evaluate the model on test data
-    test_loss, test_acc = model.evaluate(x_test, y_test, verbose=2)
-    st.write(f"Test accuracy: {test_acc:.4f}")
+    # Train the model
+    model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test), callbacks=[StreamlitCallback()])
 
     # Save the model
-    model.save("mnist_model.h5")
-    st.write("Model saved as mnist_model.h5")
+    model.save('mnist_model.h5')
 
-# Function to display sample images
-def display_sample_images(x, y, num_samples=5):
-    indices = np.random.choice(len(x), num_samples, replace=False)
-    for i in indices:
-        st.image(x[i], width=100, caption=f"Label: {np.argmax(y[i])}")
+    return model
 
-# Display sample images
-st.write("Sample training images:")
-display_sample_images(x_train, y_train)
+# Load the model if it exists
+try:
+    model = tf.keras.models.load_model('mnist_model.h5')
+except:
+    model = None
+
+st.title("MNIST Digit Recognizer")
+
+# Buttons for training and assessing
+train_button = st.button("Train Model")
+assess_button = st.button("Assess Drawing")
+
+# Training the model
+if train_button:
+    with st.spinner('Training the model...'):
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        model = train_model(progress_bar, status_text)
+    st.success("Model trained successfully!")
+
+# Create a canvas to draw on
+canvas_result = st_canvas(
+    fill_color="white",
+    stroke_width=10,
+    stroke_color="black",
+    background_color="white",
+    height=280,
+    width=280,
+    drawing_mode="freedraw",
+    key="canvas"
+)
+
+# Assess the drawing if the model is available and the assess button is clicked
+if model and assess_button:
+    if canvas_result.image_data is not None:
+        # Convert the canvas image to a PIL image
+        image = Image.fromarray((canvas_result.image_data[:, :, :3] * 255).astype(np.uint8))
+
+        # Preprocess the image
+        processed_image = preprocess_image(image)
+
+        # Make a prediction
+        predictions = model.predict(processed_image)
+        predicted_digit = np.argmax(predictions)
+
+        st.write(f"Predicted Digit: {predicted_digit}")
+        st.bar_chart(predictions[0])
+    else:
+        st.warning("Please draw something on the canvas!")
+elif not model and assess_button:
+    st.warning("Please train the model first!")
