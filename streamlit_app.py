@@ -1,23 +1,18 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
-import cv2
 from PIL import Image, ImageOps
 from streamlit_drawable_canvas import st_canvas
+import os
+
+MODEL_PATH = 'mnist_model.h5'
 
 # Function to preprocess the image
 def preprocess_image(image):
     # Convert the image to grayscale
     image = ImageOps.grayscale(image)
-    # Resize the image to 28x28 pixels
-    image = image.resize((28, 28))
-    # Convert the image to a numpy array
-    image = np.array(image)
-    # Invert the colors (MNIST images are white on black)
-    # image = 255 - image
     # Normalize the image
-    # image = image + 255
-    # image = 255 - image
+    image = np.array(image) / 255.0
     # Reshape the image to fit the model input
     image = image.reshape(1, 28, 28, 1)
     return image
@@ -52,15 +47,18 @@ def train_model(progress_bar, status_text):
     model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test), callbacks=[StreamlitCallback()])
 
     # Save the model
-    model.save('mnist_model.h5')
+    model.save(MODEL_PATH)
 
     return model
 
 # Load the model if it exists
-try:
-    model = tf.keras.models.load_model('mnist_model.h5')
-except:
-    model = None
+def load_model():
+    if os.path.exists(MODEL_PATH):
+        return tf.keras.models.load_model(MODEL_PATH)
+    return None
+
+# Initialize the model
+model = load_model()
 
 st.title("MNIST Digit Recognizer")
 
@@ -96,6 +94,9 @@ if model and assess_button:
 
         # Convert the image data to a PIL image
         image = Image.fromarray((image_data[:, :, :3] * 255).astype(np.uint8))
+
+        # Resize to 28x28 pixels to match MNIST dataset
+        image = image.resize((28, 28))
 
         # Preprocess the image
         processed_image = preprocess_image(image)
