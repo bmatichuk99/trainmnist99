@@ -1,5 +1,6 @@
 streamlit==1.26.0
-tensorflow
-numpy
-PIL
-cv2
+tensorflow==2.8.0
+numpy==1.21.5
+opencv-python==4.5.5.64
+Pillow==9.0.1
+streamlit-drawable-canvas==0.8.0
