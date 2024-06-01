@@ -15,7 +15,9 @@ def preprocess_image(image):
     enhancer = ImageEnhance.Contrast(image)
     image = enhancer.enhance(2.0)
     # Normalize the image
-    image = np.array(image) / 255.0
+    # image = np.array(image) / 255.0
+    image = image + 255
+    image = 255 - image
     # Reshape the image to fit the model input
     image = image.reshape(1, 28, 28, 1)
     return image
