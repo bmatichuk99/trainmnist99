@@ -90,8 +90,11 @@ canvas_result = st_canvas(
 # Assess the drawing if the model is available and the assess button is clicked
 if model and assess_button:
     if canvas_result.image_data is not None:
-        # Convert the canvas image to a PIL image
-        image = Image.fromarray((canvas_result.image_data[:, :, :3] * 255).astype(np.uint8))
+        # Extract the image data from the canvas
+        image_data = canvas_result.image_data
+
+        # Convert the image data to a PIL image
+        image = Image.fromarray((image_data[:, :, :3] * 255).astype(np.uint8))
 
         # Preprocess the image
         processed_image = preprocess_image(image)
