@@ -1,7 +1,7 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageEnhance
 from streamlit_drawable_canvas import st_canvas
 import os
 
@@ -11,6 +11,9 @@ MODEL_PATH = 'mnist_model.h5'
 def preprocess_image(image):
     # Convert the image to grayscale
     image = ImageOps.grayscale(image)
+    # Enhance the contrast
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(2.0)
     # Normalize the image
     image = np.array(image) / 255.0
     # Reshape the image to fit the model input
