@@ -77,10 +77,10 @@ if train_button:
 
 # Create a canvas to draw on
 canvas_result = st_canvas(
-    fill_color="white",
+    fill_color="black",
     stroke_width=10,
-    stroke_color="black",
-    background_color="white",
+    stroke_color="white",
+    background_color="black",
     height=280,
     width=280,
     drawing_mode="freedraw",
