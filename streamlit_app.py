@@ -99,6 +99,9 @@ if model and assess_button:
         # Preprocess the image
         processed_image = preprocess_image(image)
 
+        # Debug: Display the preprocessed image
+        st.image(processed_image.reshape(28, 28), width=100, caption='Preprocessed Image')
+
         # Make a prediction
         predictions = model.predict(processed_image)
         predicted_digit = np.argmax(predictions)
