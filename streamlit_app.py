@@ -1,7 +1,8 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
-from PIL import Image, ImageOps, ImageEnhance
+from PIL import Image, ImageOps
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from streamlit_drawable_canvas import st_canvas
 import os
 
@@ -10,17 +11,21 @@ MODEL_PATH = 'mnist_model.h5'
 # Function to preprocess the image
 def preprocess_image(image):
     # Convert the image to grayscale
-    image = ImageOps.grayscale(image)
-    # Enhance the contrast
-    enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(2.0)
-    # Normalize the image
-    # image = np.array(image) / 255.0
-    image = image + 255
-    image = 255 - image
+    grayscale_image = ImageOps.grayscale(image)
+    
+    # Resize the image to 28x28 pixels
+    resized_image = grayscale_image.resize((28, 28), Image.LANCZOS)
+
+    # Convert to numpy array and normalize the image to have values between 0 and 1
+    image_array = np.array(resized_image).astype('float32') / 255.0
+
+    # Apply a less aggressive threshold
+    threshold = 0.25  # Lower threshold value to make it less aggressive
+    image_array = np.where(image_array > threshold, image_array, 0.0)
+
     # Reshape the image to fit the model input
-    image = image.reshape(1, 28, 28, 1)
-    return image
+    reshaped_image = image_array.reshape(1, 28, 28, 1)
+    return reshaped_image, image_array
 
 # Function to build and train the model
 def train_model(progress_bar, status_text):
@@ -28,6 +33,15 @@ def train_model(progress_bar, status_text):
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
     x_train = x_train.reshape(-1, 28, 28, 1).astype('float32') / 255
     x_test = x_test.reshape(-1, 28, 28, 1).astype('float32') / 255
+
+    # Data augmentation
+    datagen = ImageDataGenerator(
+        width_shift_range=0.2,
+        height_shift_range=0.2,
+        rotation_range=10,
+        zoom_range=0.1
+    )
+    datagen.fit(x_train)
 
     # Build the model
     model = tf.keras.Sequential([
@@ -48,8 +62,11 @@ def train_model(progress_bar, status_text):
             progress_bar.progress(progress)
             status_text.text(f"Epoch {epoch + 1}/{self.params['epochs']}, Loss: {logs['loss']:.4f}, Accuracy: {logs['accuracy']:.4f}")
 
-    # Train the model
-    model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test), callbacks=[StreamlitCallback()])
+    # Train the model using the augmented data
+    model.fit(datagen.flow(x_train, y_train, batch_size=32),
+              epochs=5, 
+              validation_data=(x_test, y_test),
+              callbacks=[StreamlitCallback()])
 
     # Save the model
     model.save(MODEL_PATH)
@@ -70,55 +87,65 @@ model = load_model()
 
 st.title("MNIST Digit Recognizer")
 
-# Buttons for training and assessing
-train_button = st.button("Train Model")
-assess_button = st.button("Assess Drawing")
+# Create a wider container for the layout
+with st.container():
+    # Create columns for layout
+    col1, col2 = st.columns([2, 1])
 
-# Training the model
-if train_button:
-    with st.spinner('Training the model...'):
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        model = train_model(progress_bar, status_text)
-    st.success("Model trained successfully!")
+    with col1:
+        # Buttons for training and assessing
+        train_button = st.button("Train Model")
+        assess_button = st.button("Assess Drawing")
 
-# Create a canvas to draw on
-canvas_result = st_canvas(
-    fill_color="black",
-    stroke_width=10,
-    stroke_color="white",
-    background_color="black",
-    height=280,
-    width=280,
-    drawing_mode="freedraw",
-    key="canvas"
-)
+        # Training the model
+        if train_button:
+            with st.spinner('Training the model...'):
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                model = train_model(progress_bar, status_text)
+            st.success("Model trained successfully!")
 
-# Assess the drawing if the model is available and the assess button is clicked
-if model and assess_button:
-    if canvas_result.image_data is not None:
-        # Extract the image data from the canvas
-        image_data = canvas_result.image_data
+    with col2:
+        # Create a canvas to draw on
+        canvas_result = st_canvas(
+            fill_color="black",
+            stroke_width=18,
+            stroke_color="white",
+            background_color="black",
+            height=280,  # Increased size to match the aspect ratio
+            width=280,
+            drawing_mode="freedraw",
+            key="canvas"
+        )
 
-        # Convert the image data to a PIL image
-        image = Image.fromarray((image_data[:, :, :3] * 255).astype(np.uint8))
+    # Display the results in columns
+    if model and assess_button:
+        if canvas_result.image_data is not None:
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                # Extract the image data from the canvas
+                image_data = canvas_result.image_data[:, :, :3]  # Use RGB channels
 
-        # Resize to 28x28 pixels to match MNIST dataset
-        image = image.resize((28, 28))
+                # Convert the image data to grayscale by averaging the RGB channels
+                image_data = np.mean(image_data, axis=2).astype(np.uint8)
 
-        # Preprocess the image
-        processed_image = preprocess_image(image)
+                # Convert the image data to a PIL image
+                image = Image.fromarray(image_data)
 
-        # Debug: Display the preprocessed image
-        st.image(processed_image.reshape(28, 28), width=100, caption='Preprocessed Image')
+                # Preprocess the image
+                processed_image, final_image = preprocess_image(image)
 
-        # Make a prediction
-        predictions = model.predict(processed_image)
-        predicted_digit = np.argmax(predictions)
+                # Display the final preprocessed image
+                st.image(final_image, caption='Final Preprocessed Image', use_column_width=True, clamp=True)
 
-        st.write(f"Predicted Digit: {predicted_digit}")
-        st.bar_chart(predictions[0])
-    else:
-        st.warning("Please draw something on the canvas!")
-elif not model and assess_button:
-    st.warning("Please train the model first!")
+            with col2:
+                # Make a prediction
+                predictions = model.predict(processed_image)
+                predicted_digit = np.argmax(predictions)
+
+                st.write(f"Predicted Digit: {predicted_digit}")
+                st.bar_chart(predictions[0])
+        else:
+            st.warning("Please draw something on the canvas!")
+    elif not model and assess_button:
+        st.warning("Please train the model first!")
